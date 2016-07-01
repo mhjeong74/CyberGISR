@@ -1,0 +1,93 @@
+---
+title: "Intro To R"
+output: html_document
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+R basics:
+-------------------------
+```{r}
+#1. R as a calculatro
+4 + 1 - 2
+
+#2. Assignments
+x <- 3         # Assignment
+x              # Evaluate the expression and print result
+
+y <- 4         # Assignment
+y + 5          # Evaluation, y remains 4
+
+#3. Value comparisons
+2==2  # Equality
+2!=2  # Inequality
+
+
+```
+
+Basic data structures:
+
+```{r}
+#1. Vecotrs: Vectors can be constructed by combining their elements with the important R function c().
+v1 <- c(1, 5, 11, 33)       # Numeric vector, length 4
+v2 <- c("hello","world")    # Character vector, length 2 (a vector of strings)
+v3 <- c(TRUE, TRUE, FALSE)  # Logical vector, same as c(T, T, F)
+
+#2. Matrix
+#A matrix is a vector with dimensions:
+m <- rep(1, 20)   # A vector of 20 elements, all 1
+dim(m) <- c(5,4)  # Dimensions set to 5 & 4, so m is now a 5x4 matrix
+#Creating a matrix using matrix():
+m <- matrix(data=1, nrow=5, ncol=4)  # same matrix as above, 5x4, full of 1s
+m <- matrix(1,5,4)                       # same matrix as above
+dim(m)                               # What are the dimensions of m?
+#Creating a matrix by combining vectors:
+m <- cbind(1:5, 5:1, 5:9)  # Bind 3 vectors as columns, 5x3 matrix
+m <- rbind(1:5, 5:1, 5:9)  # Bind 3 vectors as rows, 3x5 matrix
+
+#3. Lists: Lists are collections of objects.
+l1 <- list(boo=v1,foo=v2,moo=v3,zoo="Animals!")  # A list with four components
+l2 <- list(v1,v2,v3,"Animals!")
+
+#4. Data Frames: The data frame is a special kind of list used for storing dataset tables. 
+dfr1 <- data.frame( ID=1:4,
+                    FirstName=c("John","Jim","Jane","Jill"),
+                    Female=c(F,F,T,T), 
+                    Age=c(22,33,44,55) )
+
+dfr1$FirstName   # Access the second column of dfr1. 
+
+```
+
+Flow Control and loops:
+```{r}
+# if (condition) expr1 else expr2
+x <- 5; y <- 10
+if (x==0) y <- 0 else y <- y/x #  
+y
+
+# for (variable in sequence) expr
+ASum <- 0; AProd <- 1
+for (i in 1:x)  
+{
+  ASum <- ASum + i
+  AProd <- AProd * i
+}
+ASum  # equivalent to sum(1:x)
+AProd # equivalemt to prod(1:x)
+
+```
+
+R plots and colors:
+```{r}
+# In the simple base R plot chart below, x and y are the point coordinates, pch is the point symbol shape, cex is the point size, and col is the color. To see the parameters for plotting in base R, check out ?par
+plot(x=1:10, y=rep(5,10), pch=19, cex=3, col="dark red")
+points(x=1:10, y=rep(6, 10), pch=19, cex=3, col="557799")
+points(x=1:10, y=rep(4, 10), pch=19, cex=3, col=rgb(.25, .5, .3))
+
+
+```
+
+
