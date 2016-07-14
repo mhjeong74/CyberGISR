@@ -1,0 +1,123 @@
+
+LAB3:
+#Environmental variable setting
+
+vi ~/.bashrc  -- open bashrc file
+
+#Hadoop
+
+export R_LIBS=/home/cgtrn50/R
+
+export HADOOP_CMD="/usr/bin/hadoop"
+
+export HADOOP_STREAMING="/usr/hdp/2.3.2.0-2602/hadoop-mapreduce/hadoop-streaming-2.7.1.2.3.2.0-2602.jar”
+
+
+
+#Spark
+
+export SPARK_HOME=/home/cgtrn50/cybergis_r/spark-1.6.2-bin-hadoop2.6/:$SPARK_HOME
+
+
+
+#Log in Hadoop cluster
+ssh cg-hm08
+
+#Start R
+R
+#Set up the SPARK_HOME
+Sys.setenv(SPARK_HOME = "/home/cgtrn**/cybergis_r/spark-1.6.2-bin-hadoop2.6")
+#Set up the HADOOP config dir
+
+Sys.setenv(HADOOP_CMD="/usr/bin/hadoop")
+Sys.setenv(HADOOP_STREAMING="/usr/hdp/2.3.2.0-2602/hadoop-mapreduce/hadoop-streaming-2.7.1.2.3.2.0-2602.jar")
+
+#Load sparkR
+
+library(SparkR, lib.loc = c(file.path(Sys.getenv("SPARK_HOME"), "R", "lib")))
+
+
+#Initialize SparkContext
+
+sc <- sparkR.init(sparkPackages="com.databricks:spark-csv_2.10:1.3.0")
+
+
+#Initialize SQLContext
+
+sqlContext = sparkRSQL.init(sc)
+
+
+#Define schema
+
+schema <- structType(structField("id", "string",TRUE),
+
+                     structField("lat", "double",TRUE),
+
+             	     structField("lon", "double",TRUE),
+
+	             structField("gamma", "integer",TRUE),
+
+		     structField("time", "double",TRUE)) 
+
+
+#Directly create a SparkR DataFrame from the source data
+
+df <- read.df(sqlContext, "hdfs://cg-hm08.ncsa.illinois.edu/user/mhjeong/radiation_test.csv", source = "com.databricks.spark.csv", schema)
+
+
+#Print the DataFrame
+
+head(df)
+
+#Print the schema of this Spark DataFrame
+
+printSchema(df)
+
+
+#Using SQL to select columns of data
+
+#First, register the radiation DataFrame as a table
+
+registerTempTable(df, "radiationTable")
+
+radDF <- sql(sqlContext, "SELECT id,lat,lon,gamma FROM radiationTable")
+
+
+#Use collect to create a local R data frame
+
+local_df <- collect(radDF)
+
+#Print the newly created local data frame and calculate a threshold 
+
+head(local_df)
+
+s<-sd(local_df$gamma)
+
+m<-mean(local_df$gamma)
+
+threshold<-m + 3*s
+
+#Filter radiation data based on a threshold 
+
+alarmDF <- filter(radDF, radDF$gamma > threshold)
+
+
+#Save the contents of the DataFrame to a data source
+
+write.df(alarmDF, "hdfs://cg-hm08.ncsa.illinois.edu/user/cgtrn**/alarm_radiation.csv", source = "com.databricks.spark.csv")
+
+
+#Stop the SparkContext now
+
+sparkR.stop()
+
+
+#quit R
+q()
+
+#Check the alarm_radiation.csv file in hadoop
+hadoop fs -ls
+
+#Download the file
+hadoop fs -getmerge alarm_radiation.csv alarm.csv
+

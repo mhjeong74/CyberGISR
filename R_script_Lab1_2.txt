@@ -1,0 +1,205 @@
+
+
+A. LAB 1
+#Environmental variable setting
+
+vi ~/.bashrc  -- open bashrc file
+module load R/3.2.1-openmpi gdal-stack -- put this line and exit the file after saving.
+
+
+#Start R
+R
+
+#Step 1: install packages 
+install.packages(c("snow", "Rmpi", "foreach", "doSNOW", "parallel", "boot", "maptools", "spdep"))
+
+
+#Step 2: Define a simple R function
+myProc <- function(size=10000000) {
+#Load a large vector
+vec <- rnorm(size)
+#Now sleep on it
+Sys.sleep(2)
+#Now sum the vec values
+return(sum(vec))
+}
+
+#Step 3: Serial - apply
+ptm <- proc.time()
+result <- sapply(1:10, function(i) myProc())
+proc.time() - ptm
+
+
+
+#Step 4: parallel package: mclapply
+
+require(parallel)
+ptm <- proc.time()
+result <- mclapply(1:10, function(i) myProc(), mc.cores=10)
+proc.time() - ptm
+
+
+#Step 5: snow package
+require(snow)
+hostnames <- rep('localhost', 10)
+cluster <- makeSOCKcluster(hostnames)
+clusterExport(cluster, list('myProc'))
+ptm <- proc.time()
+result <- clusterApply(cluster, 1:10, function(i) myProc())
+proc.time() - ptm
+stopCluster(cluster)
+
+
+#Step 6: foreach + snow package
+require(foreach)
+require(doSNOW)
+## Loading required package: doSNOW
+hostnames <- rep('localhost', 10)
+cluster <- makeSOCKcluster(hostnames)
+registerDoSNOW(cluster)
+ptm <- proc.time()
+result <- foreach(i=1:10, .combine=c) %dopar% {
+myProc()
+}
+proc.time() - ptm
+stopCluster(cluster)
+
+#Step 7. Bootstrap calculations
+require(foreach)
+require(doSNOW)
+#Serial implementation
+random.data <- matrix(rnorm(1000000), ncol = 1000)
+bmed <- function(d, n) median(d[n])
+library(boot)
+sapply(1:100, function(n) {sd(boot(random.data[, n], bmed, R = 2000)$t)})
+
+
+#Parallel implementation
+random.data <- matrix(rnorm(1000000), ncol = 1000)
+bmed <- function(d, n) median(d[n])
+library(boot)
+cluster = makeCluster(10, type = "SOCK")
+registerDoSNOW(cluster)
+clusterExport(cluster, c("random.data", "bmed"))
+results = foreach(n = 1:100, .combine = c) %dopar% {
+     library(boot); sd(boot(random.data[, n], bmed, R = 2000)$t)
+}
+results
+stopCluster(cluster)
+
+#Step 8: Bootstrap calculations with multi-nodes. 
+#You need to quit R if your are in R session.
+q()
+#Change directory
+cd ~/cybergis_r/rmpi
+#Change an email address in multinodes.sh file
+vim multinodes.sh
+#Run qsub script
+qsub multinodes.sh
+#You can see the results in multinodes.log file
+
+
+#Step 9: Rmpi. 
+#You need to quit R if your are in R session.
+q()
+#Change directory
+cd ~/cybergis_r/rmpi
+#Change an email address in multinodes.sh file
+vim multinodes.sh
+#Run qsub script
+qsub hello.sh
+#You can see the results in hello.log file
+
+
+
+
+
+
+LAB2: Parallel spatial autocorrelation 
+#Step 1: Serial implementation
+require(maptools) 
+require(spdep)
+
+
+#an absolute file path representing the current working directory of the R process
+getwd()
+#set the working directory
+setwd("~/cybergis_r")
+
+#Get shapefile header information in the radiation data
+getinfo.shape("Oct_17_20_proj.shp")
+#Reads data from a points shapefile
+radiation<-readShapePoints ("Oct_17_20_proj.shp")
+
+#Retrieve spatial coordinates from a Spatial object
+coords<-coordinates(radiation)
+IDs<-row.names(as(radiation, "data.frame"))
+
+#Neighbourhood contiguity by distance
+radiation_nei<-dnearneigh(coords, d1=0, d2=20, row.names=IDs)
+
+#Spatial weights for neighbours lists
+radiation_nbq_wb<-nb2listw(radiation_nei, style="W")
+
+#Moran's I test for spatial autocorrelation
+moran.test(radiation$field_5, listw=radiation_nbq_wb)
+
+#Permutation test for Moran's I statistic
+#gamma <- radiation$field_5
+#listw <- radiation_nbq_wb  
+#nsim <- 999
+#ptm <- proc.time()
+#sim1 <- moran.mc(gamma, listw=listw, nsim=nsim)
+#proc.time() - ptm
+#sim1
+
+#Step 2: Parallel Moran's I
+require(foreach)
+require(doSNOW)
+gamma <- radiation$field_5
+listw <- radiation_nbq_wb  
+nsim <- 999
+n <- length(listw$neighbours)
+S0 <- Szero(listw)
+cluster = makeCluster(10, type = "SOCK")
+registerDoSNOW(cluster)
+clusterExport(cluster, c("gamma", "listw","n","S0"))
+ptm <- proc.time()
+results = foreach(n = 1:nsim, .combine = c) %dopar% {
+ library(spdep); moran(sample(gamma), listw, n, S0,zero.policy=NULL)$I
+}
+
+paMoran <- function(res, x, listw, nsim,zero.policy=NULL,alternative="greater") {
+  n <- length(listw$neighbours)
+  S0 <- Szero(listw)
+
+  res[nsim+1] <- moran(x, listw, n, S0, zero.policy)$I
+  rankres <- rank(res)
+  xrank <- rankres[length(res)]
+	diff <- nsim - xrank
+	diff <- ifelse(diff > 0, diff, 0)
+
+  if (alternative == "less") 
+        	pval <- punif((diff + 1)/(nsim + 1), lower.tail=FALSE)
+    	else if (alternative == "greater") 
+        	pval <- punif((diff + 1)/(nsim + 1))
+  
+	statistic <- res[nsim+1]
+	names(statistic) <- "statistic"
+	parameter <- xrank
+	names(parameter) <- "observed rank"
+	method <- "Parallel Monte-Carlo simulation of Moran's I"
+	lres <- list(statistic=statistic, parameter=parameter,
+	    p.value=pval, alternative=alternative, method=method,res=res)  
+  	lres 
+}
+#example1
+mtest <- paMoran(results,gamma,listw,nsim)
+mtest$method
+mtest$statistic 
+mtest$parameter
+mtest$p.value
+#mtest$res
+
+stopCluster(cluster)
+
